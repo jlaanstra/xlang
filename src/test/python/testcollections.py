@@ -33,9 +33,12 @@ class TestCollections(unittest.TestCase):
         token = m.add_MapChanged(onMapChanged)
         m.Insert("dr", "who")
         m.remove_MapChanged(token)
+        m.Insert("king", "arthur")
+
 
         self.assertTrue(called.get("dr"))
         self.assertFalse(called.get("hello"), False)
+        self.assertFalse(called.get("king"), False)
 
 if __name__ == '__main__':
     unittest.main()
