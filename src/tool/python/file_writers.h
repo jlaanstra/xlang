@@ -87,8 +87,7 @@ namespace xlang
         writer w;
 
         write_license_cpp(w);
-        w.write(strings::module_methods);
-        write_module_def(w, module_name, module_name, "module_methods");
+        w.write(strings::module_methods, settings.module, settings.module, settings.module, settings.module);
 
         auto filename = w.write_temp("%.cpp", module_name);
         create_directories(folder);
