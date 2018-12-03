@@ -1,6 +1,5 @@
 import find_projection
 import unittest
-import asyncio
 
 import pyrt.windows.foundation.collections as wfc
 
@@ -17,34 +16,26 @@ class TestCollections(unittest.TestCase):
 
 
     def test_stringmap_changed_event(self):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(None)
-        
-        async def async_test():
-            future = loop.create_future()
+        called = {}
 
-            def onMapChanged(sender, args): 
-                self.assertEqual(args.CollectionChange, 1)
-                self.assertEqual(args.Key, "dr")
+        def onMapChanged(sender, args): 
+            self.assertEqual(args.CollectionChange, 1)
+            self.assertEqual(args.Key, "dr")
 
-                self.assertEqual(sender.Size, 2)
-                self.assertTrue(sender.HasKey("dr"))
-                self.assertTrue(sender.HasKey("hello"))
-                
-                loop.call_soon_threadsafe(asyncio.Future.set_result, future, True)
+            self.assertEqual(sender.Size, 2)
+            self.assertTrue(sender.HasKey("dr"))
+            self.assertTrue(sender.HasKey("hello"))
 
-            m = wfc.StringMap()
-            m.Insert("hello", "world")
-            token = m.add_MapChanged(onMapChanged)
-            m.Insert("dr", "who")
-            m.remove_MapChanged(token)
+            called[args.Key] = True
 
-            called = await future
-            self.assertTrue(called)
+        m = wfc.StringMap()
+        m.Insert("hello", "world")
+        token = m.add_MapChanged(onMapChanged)
+        m.Insert("dr", "who")
+        m.remove_MapChanged(token)
 
-        loop.run_until_complete(async_test())
-        loop.close()
-
+        self.assertTrue(called.get("dr"))
+        self.assertFalse(called.get("hello"), False)
 
 if __name__ == '__main__':
     unittest.main()
