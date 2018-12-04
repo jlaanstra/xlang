@@ -31,6 +31,140 @@ namespace py
         }
     };
 
+    struct py_ptr
+    {
+        py_ptr(std::nullptr_t = nullptr) noexcept {}
+
+        py_ptr(py_ptr const& other) noexcept : m_ptr(other.m_ptr)
+        {
+            add_ref();
+        }
+
+        py_ptr(py_ptr&& other) noexcept : m_ptr(std::exchange(other.m_ptr, {}))
+        {
+        }
+
+        ~py_ptr() noexcept
+        {
+            release_ref();
+        }
+
+        py_ptr& operator=(py_ptr const& other) noexcept
+        {
+            copy_ref(other.m_ptr);
+            return*this;
+        }
+
+        py_ptr& operator=(py_ptr&& other) noexcept
+        {
+            if (this != &other)
+            {
+                release_ref();
+                m_ptr = std::exchange(other.m_ptr, {});
+            }
+
+            return*this;
+        }
+
+        explicit operator bool() const noexcept
+        {
+            return m_ptr != nullptr;
+        }
+
+        auto operator->() const noexcept
+        {
+            return m_ptr;
+        }
+
+        PyObject* get() const noexcept
+        {
+            return m_ptr;
+        }
+
+        PyObject** put() noexcept
+        {
+            WINRT_ASSERT(m_ptr == nullptr);
+            return &m_ptr;
+        }
+
+        void attach(PyObject* value) noexcept
+        {
+            release_ref();
+            *put() = value;
+        }
+
+        PyObject* detach() noexcept
+        {
+            return std::exchange(m_ptr, {});
+        }
+
+        void copy_from(PyObject* other) noexcept
+        {
+            copy_ref(other);
+        }
+
+        void copy_to(PyObject** other) const noexcept
+        {
+            add_ref();
+            *other = m_ptr;
+        }
+
+        py_ptr get_attr(const char* attr_name) const noexcept
+        {
+            WINRT_ASSERT(m_ptr != nullptr);
+            return py_ptr::steal(PyObject_GetAttrString(m_ptr, "set_result"));
+        }
+
+        static py_ptr borrow(PyObject* other) noexcept
+        {
+            py_ptr py{};
+            py.copy_from(other);
+            return std::move(py);
+        }
+
+        static py_ptr steal(PyObject* other) noexcept
+        {
+            py_ptr py{};
+            py.attach(other);
+            return std::move(py);
+        }
+
+    private:
+
+        void copy_ref(PyObject* other) noexcept
+        {
+            if (m_ptr != other)
+            {
+                release_ref();
+                m_ptr = other;
+                add_ref();
+            }
+        }
+
+        void add_ref() const noexcept
+        {
+            if (m_ptr)
+            {
+                Py_INCREF(m_ptr);
+            }
+        }
+
+        void release_ref() noexcept
+        {
+            if (m_ptr)
+            {
+                unconditional_release_ref();
+            }
+        }
+
+        WINRT_NOINLINE void unconditional_release_ref() noexcept
+        {
+            Py_DECREF(std::exchange(m_ptr, {}));
+        }
+
+        PyObject* m_ptr{};
+    };
+
     template <typename Category>
     struct pinterface_checker
     {
@@ -114,6 +248,7 @@ namespace py
 
         static winrt::Windows::Foundation::IUnknown const& fetch_unknown(winrt_wrapper_base* self)
         {
+            WINRT_ASSERT(self != nullptr);
             return reinterpret_cast<winrt_wrapper<T>*>(self)->obj;
         }
     };
@@ -125,6 +260,7 @@ namespace py
 
         static winrt::Windows::Foundation::IUnknown const& fetch_unknown(winrt_wrapper_base* self)
         {
+            WINRT_ASSERT(self != nullptr);
             return reinterpret_cast<winrt_pinterface_wrapper<T>*>(self)->obj->get_unknown();
         }
     };
@@ -132,6 +268,7 @@ namespace py
     template<typename To>
     To as(winrt_wrapper_base* wrapper)
     {
+        WINRT_ASSERT(wrapper != nullptr);
         return wrapper->get_unknown(wrapper).as<To>();
     }
 
@@ -214,11 +351,7 @@ namespace py
         }
 
         auto py_instance = PyObject_New(py::winrt_struct_wrapper<T>, type_object);
-
-        if (!py_instance)
-        {
-            return nullptr;
-        }
+        if (!py_instance) { return nullptr; }
 
         // PyObject_New doesn't call type's constructor, so manually initialize the wrapper's fields
         std::memset(&(py_instance->obj), 0, sizeof(py_instance->obj));
@@ -237,11 +370,7 @@ namespace py
         }
 
         auto py_instance = PyObject_New(py::winrt_wrapper<T>, type_object);
-
-        if (!py_instance)
-        {
-            return nullptr;
-        }
+        if (!py_instance) { return nullptr; }
 
         // PyObject_New doesn't call type's constructor, so manually initialize the wrapper's fields
         py_instance->get_unknown = &winrt_wrapper<T>::fetch_unknown;
@@ -259,7 +388,6 @@ namespace py
         using ptype = pinterface_python_type<T>;
 
         PyTypeObject* type_object = get_python_type<T>();
-
         if (type_object == nullptr)
         {
             PyErr_SetNone(PyExc_NotImplementedError);
@@ -267,11 +395,7 @@ namespace py
         }
 
         auto py_instance = PyObject_New(py::winrt_pinterface_wrapper<ptype::abstract>, type_object);
-
-        if (!py_instance)
-        {
-            return nullptr;
-        }
+        if (!py_instance) { return nullptr; }
 
         // PyObject_New doesn't call type's constructor, so manually initialize the wrapper's fields
         py_instance->get_unknown = &winrt_pinterface_wrapper<ptype::abstract>::fetch_unknown;
@@ -583,7 +707,7 @@ namespace py
                 throw winrt::hresult_invalid_argument();
             }
 
-            return str;
+            return std::move(str);
         }
     };
 
@@ -809,58 +933,81 @@ namespace py
         return converter<T>::convert_to(PyTuple_GetItem(args, index));
     }
 
-    template <typename Async>
-    PyObject* get_results(Async const& operation)
+    namespace impl
     {
-        if constexpr (std::is_void_v<decltype(operation.GetResults())>)
+        template <typename Async>
+        py_ptr get_results(Async const& operation)
         {
-            operation.GetResults();
-            Py_INCREF(Py_None);
-            return Py_None;
-        }
-        else
-        {
-            return convert(operation.GetResults());
+            if constexpr (std::is_void_v<decltype(operation.GetResults())>)
+            {
+                operation.GetResults();
+                return py_ptr::borrow(Py_None);
+            }
+            else
+            {
+                return py_ptr::steal(convert(operation.GetResults()));
+            }
         }
     }
 
     template <typename Async>
     PyObject* dunder_await(Async const& async)
     {
-        PyObject* loop = PyObject_CallMethod(PyImport_ImportModule("asyncio"), "get_event_loop", nullptr);
-        if (!loop)
-        {
-            return nullptr;
-        }
+        auto asyncio = py_ptr::steal(PyImport_ImportModule("asyncio"));
+        if (!asyncio) { return nullptr; }
 
-        PyObject* future = PyObject_CallMethod(loop, "create_future", nullptr);
-        if (!future)
-        {
-            return nullptr;
-        }
+        auto loop = py_ptr::steal(PyObject_CallMethod(asyncio.get(), "get_event_loop", nullptr));
+        if (!loop) { return nullptr; }
+
+        auto future = py_ptr::steal(PyObject_CallMethod(loop.get(), "create_future", nullptr));
+        if (!future) { return nullptr; }
 
         try
         {
-            async.Completed([loop, future](Async const& operation, winrt::Windows::Foundation::AsyncStatus status)
+            async.Completed([loop = std::move(loop), future = py_ptr{ future }]
+            (Async const& operation, winrt::Windows::Foundation::AsyncStatus status)
             {
                 winrt::handle_type<py::gil_state_traits> gil_state{ PyGILState_Ensure() };
 
                 if (status == winrt::Windows::Foundation::AsyncStatus::Completed)
                 {
-                    // result = operation.GetResults()
-                    PyObject* results = get_results(operation);
+                    auto set_result = future.get_attr("set_result");
+                    if (!set_result)
+                    {
+                        // TODO: throw Python error
+                        winrt::throw_hresult(winrt::impl::error_fail);
+                    }
 
-                    // loop.call_soon_threadsafe(future.set_result, results)
-                    PyObject_CallMethod(loop, "call_soon_threadsafe", "OO", PyObject_GetAttrString(future, "set_result"), results);
+                    auto results = impl::get_results(operation);
+                    if (!results)
+                    {
+                        // TODO: throw Python error
+                        winrt::throw_hresult(winrt::impl::error_fail);
+                    }
+
+                    auto callable_return = py_ptr::steal(PyObject_CallMethod(loop.get(), "call_soon_threadsafe", "OO", set_result.get(), results.get()));
+                    if (!callable_return)
+                    {
+                        // TODO: throw Python error
+                        winrt::throw_hresult(winrt::impl::error_fail);
+                    }
                 }
                 else
                 {
-                    // loop.call_soon_threadsafe(future.set_exception, RuntimeError("AsyncOp failed"))
-                    PyObject_CallMethod(loop, "call_soon_threadsafe", "OO", PyObject_GetAttrString(future, "set_exception"), PyExc_RuntimeError);
-                }
+                    auto set_exception = future.get_attr("set_exception");
+                    if (!set_exception)
+                    {
+                        winrt::throw_hresult(winrt::impl::error_fail);
+                    }
 
-                Py_DECREF(future);
-                Py_DECREF(loop);
+                    // TODO: set runtime error string
+                    auto callable_return = py_ptr::steal(PyObject_CallMethod(loop.get(), "call_soon_threadsafe", "OO", set_exception.get(), PyExc_RuntimeError));
+                    if (!callable_return)
+                    {
+                        // TODO: throw Python error
+                        winrt::throw_hresult(winrt::impl::error_fail);
+                    }
+                }
             });
         }
         catch (...)
@@ -868,7 +1015,7 @@ namespace py
             return py::to_PyErr();
         }
 
-        return PyObject_GetIter(future);
+        return PyObject_GetIter(future.get());
     }
 
 }
