@@ -224,9 +224,7 @@ struct winrt_type<%>
     throw winrt::hresult_invalid_argument();
 }
 
-Py_INCREF(callable);
-
-return [callable](%)
+return [callable = py::py_ptr::borrow(callable)](%)
 {
 )";
                 w.write(format, bind_list<write_delegate_param>(", ", signature.params()));
@@ -242,31 +240,30 @@ return [callable](%)
                         auto param_name = w.write_temp("%", bind<write_param_name>(p));
                         auto py_param_name = "py_"s + param_name;
 
-                        w.write("PyObject* % = py::convert(%);\n", py_param_name, param_name);
+                        w.write("auto % = py::py_ptr::steal(py::convert(%));\n", py_param_name, param_name);
                         tuple_params.push_back(py_param_name);
                     }
 
                     if (tuple_params.size() > 0)
                     {
-                        w.write("\nPyObject* args = %;\n", bind<write_py_tuple_pack>(tuple_params));
+                        w.write("\nauto args = py::py_ptr::steal(%);\n", bind<write_py_tuple_pack>(tuple_params));
                     }
                     else
                     {
-                        w.write("PyObject* args = nullptr;\n");
+                        w.write("py::py_ptr args{};\n");
                     }
+
+                    w.write(R"(auto callable_return = py::py_ptr::steal(PyObject_CallObject(callable.get(), args.get()));
+if (!callable_return)
+{
+    // TODO: throw Python error
+    winrt::throw_hresult(winrt::impl::error_fail);
+}
+)");
 
                     if (signature.return_signature())
                     {
-                        auto format2 = R"(
-PyObject* return_value = PyObject_CallObject(callable, args);
-Py_DECREF(callable);
-return py::convert<%>(return_value);
-)";
-                        w.write(format2, signature.return_signature().Type());
-                    }
-                    else
-                    {
-                        w.write("\nPyObject_CallObject(callable, args);\nPy_DECREF(callable);\n");
+                        w.write("\nreturn py::convert<%>(callable_return);\n", signature.return_signature().Type());
                     }
                 }
 
