@@ -750,35 +750,35 @@ namespace py
     };
 
     template <typename T>
-    struct python_iterable final :
-        winrt::implements<python_iterable<T>, winrt::Windows::Foundation::Collections::IIterable<T>>
+    struct iterable final :
+        winrt::implements<iterable<T>, winrt::Windows::Foundation::Collections::IIterable<T>>
     {
-        PyObject* _iterable;
+        py_ptr m_iterable;
 
-        explicit python_iterable(PyObject* iterable) : _iterable(iterable)
+        explicit iterable(py_ptr&& iterable) : m_iterable(iterable)
         {
         }
 
         auto First() const
         {
-            return winrt::make<iterator>(PyObject_GetIter(_iterable));
+            return winrt::make<iterator>(py_ptr::steal(PyObject_GetIter(m_iterable.get())));
         }
 
     private:
         struct iterator final : winrt::implements<iterator, winrt::Windows::Foundation::Collections::IIterator<T>>
         {
-            PyObject* _iterator;
-            std::optional<T> _current_value;
+            py_ptr m_iterator;
+            std::optional<T> m_current_value;
 
-            static std::optional<T> get_next(PyObject* iterator)
+            static std::optional<T> get_next(py_ptr const& iterator)
             {
-                if (iterator == nullptr)
+                if (!iterator)
                 {
                     throw winrt::hresult_invalid_argument();
                 }
 
-                PyObject* next = PyIter_Next(iterator);
-                if (next == nullptr)
+                auto next = py_ptr::steal(PyIter_Next(iterator.get()));
+                if (!next)
                 {
                     if (PyErr_Occurred())
                     {
@@ -791,33 +791,33 @@ namespace py
                     }
                 }
 
-                return std::move(std::optional<T>{ converter<T>::convert_to(next) });
+                return std::move(std::optional<T>{ converter<T>::convert_to(next.get()) });
             }
 
-            iterator(PyObject* i) : _iterator(i)
+            iterator(py_ptr&& i) : m_iterator(i)
             {
-                if (_iterator == nullptr)
+                if (!m_iterator)
                 {
                     throw winrt::hresult_invalid_argument();
                 }
 
-                _current_value = get_next(_iterator);
+                m_current_value = get_next(m_iterator);
             }
 
             auto Current() const
             {
-                return _current_value.value();
+                return m_current_value.value();
             }
 
             bool HasCurrent() const
             {
-                return _current_value.has_value();
+                return m_current_value.has_value();
             }
 
             bool MoveNext()
             {
-                _current_value = get_next(_iterator);
-                return _current_value.has_value();
+                m_current_value = get_next(m_iterator);
+                return m_current_value.has_value();
             }
 
             uint32_t GetMany(winrt::array_view<T> values)
@@ -867,9 +867,9 @@ namespace py
                 return result.value();
             }
 
-            if (PyObject* iterator = PyObject_GetIter(obj))
+            if (auto iterator = py_ptr::steal(PyObject_GetIter(obj)))
             {
-                return winrt::make<python_iterable<TItem>>(obj);
+                return winrt::make<py::iterable<TItem>>(std::move(iterator));
             }
 
             throw winrt::hresult_invalid_argument();
