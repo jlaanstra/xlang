@@ -16,4 +16,4 @@ steps:
 - task: CMake@1
   displayName: build
   inputs:
-    cmakeArgs: '-- build . -- -v'
+    cmakeArgs: '-- build .'
