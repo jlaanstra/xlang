@@ -10,8 +10,11 @@ pool:
 container: build_container
 
 steps:
-- script: cmake ./src -B_build -GNinja -DCMAKE_CXX_COMPILER=clang++
-  displayName: 'CMake'
-- script: ninja -C _build -v 
-  displayName: 'Ninja'
-  
+- task: CMake@1
+  displayName: configure
+  inputs:
+    cmakeArgs: '../src -GNinja'
+- task: CMake@1
+  displayName: build
+  inputs:
+    cmakeArgs: '-- build . -- -v'

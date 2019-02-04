@@ -14,4 +14,12 @@ RUN C:\TEMP\vs_buildtools.exe --quiet --wait --norestart --nocache `
     --add Microsoft.VisualStudio.Component.VSSDKBuildTools `
     --add Microsoft.VisualStudio.Component.VC.ATL `
     --add Microsoft.Net.Component.4.6.1.SDK `
+    --remove Microsoft.VisualStudio.Component.Windows10SDK.10240 `
+    --remove Microsoft.VisualStudio.Component.Windows10SDK.10586 `
+    --remove Microsoft.VisualStudio.Component.Windows10SDK.14393 `
+    --remove Microsoft.VisualStudio.Component.Windows81SDK `
     --installPath C:\BuildTools
+
+# https://docs.microsoft.com/en-us/visualstudio/install/build-tools-container?view=vs-2017
+ENTRYPOINT C:\BuildTools\Common7\Tools\VsDevCmd.bat &&
+CMD ["powershell.exe", "-NoLogo", "-ExecutionPolicy", "Bypass"]
