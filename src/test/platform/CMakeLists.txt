@@ -21,4 +21,5 @@ endif()
 
 target_sources(test_platform PUBLIC main.cpp)
 
-install(TARGETS test_platform DESTINATION "test_platform")
+# platform tests currently offline
+# install(TARGETS test_platform DESTINATION "test/platform")
