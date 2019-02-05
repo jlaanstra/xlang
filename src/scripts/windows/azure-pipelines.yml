@@ -9,11 +9,16 @@ pool:
 container: build_container
 
 steps:
-- task: CMake@1
-  displayName: configure
-  inputs:
-    cmakeArgs: '../src -GNinja'
-- task: CMake@1
-  displayName: build
-  inputs:
-    cmakeArgs: '--build . -- -v'
+- script: C:\BuildTools\Common7\Tools\VsDevCmd.bat && cmake ./src -B_build -GNinja && ninja -C _build -v
+  displayName: 'build'
+
+# steps:
+# - task: CMake@1
+#   displayName: configure
+#   inputs:
+#     cmakeArgs: '../src -GNinja'
+# - task: CMake@1
+#   displayName: build
+#   inputs:
+#     cmakeArgs: '--build . -- -v'
+
