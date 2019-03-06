@@ -12,21 +12,27 @@ namespace xlang
         w.write("@ = __ns__.@\n", type.TypeName(), type.TypeName());
     }
 
-    void write_python_enum_name(writer& w, std::string_view const& name)
-    {
-        // None is a python keyword, so project it as NONE
-        if (name == "None")
-        {
-            for(auto&& c : name)
-            {
-                w.write(static_cast<char>(::toupper(c)));
-            }
-        }
-        else
-        {
-            w.write(name);
-        }
-    }
+	void write_snake_case(writer& w, std::string_view const& name, bool uppercase)
+	{
+		auto case_func = [uppercase](char c)
+		{
+			return uppercase
+				? static_cast<char>(::toupper(c))
+				: static_cast<char>(::tolower(c));
+		};
+
+		w.write(case_func(name[0]));
+		for (int i = 1; i < name.size() - 1; i++)
+		{
+			if (isupper(name[i]) && islower(name[i + 1]))
+			{
+				w.write('_');
+			}
+
+			w.write(case_func(name[i]));
+		}
+		w.write(case_func(name[name.size() - 1]));
+	}
 
     void write_python_enum(writer& w, TypeDef const& type)
     {
@@ -39,7 +45,7 @@ namespace xlang
             {
                 if (auto constant = field.Constant())
                 {
-                    w.write("% = %\n", bind<write_python_enum_name>(field.Name()), *constant);
+                    w.write("% = %\n", bind<write_snake_case>(field.Name(), true), *constant);
                 }
             }
         }
