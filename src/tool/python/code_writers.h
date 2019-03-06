@@ -22,7 +22,7 @@ namespace xlang
         };
 
         w.write(case_func(name[0]));
-        for (int i = 1; i < name.size() - 1; i++)
+        for (std::string_view::size_type i = 1; i < name.size() - 1; i++)
         {
             if (name.substr(i, 4) == "UInt")
             {
@@ -44,7 +44,6 @@ namespace xlang
 
     void write_python_enum(writer& w, TypeDef const& type)
     {
-
         w.write("class %(enum.%):\n", type.TypeName(), is_flags_enum(type) ? "IntFlag" : "IntEnum");
         {
             writer::indent_guard g{ w };
