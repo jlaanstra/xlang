@@ -12,27 +12,35 @@ namespace xlang
         w.write("@ = __ns__.@\n", type.TypeName(), type.TypeName());
     }
 
-	void write_snake_case(writer& w, std::string_view const& name, bool uppercase)
-	{
-		auto case_func = [uppercase](char c)
-		{
-			return uppercase
-				? static_cast<char>(::toupper(c))
-				: static_cast<char>(::tolower(c));
-		};
+    void write_snake_case(writer& w, std::string_view const& name, bool uppercase)
+    {
+        auto case_func = [uppercase](char c)
+        {
+            return uppercase
+                ? static_cast<char>(::toupper(c))
+                : static_cast<char>(::tolower(c));
+        };
 
-		w.write(case_func(name[0]));
-		for (int i = 1; i < name.size() - 1; i++)
-		{
-			if (isupper(name[i]) && islower(name[i + 1]))
-			{
-				w.write('_');
-			}
+        w.write(case_func(name[0]));
+        for (int i = 1; i < name.size() - 1; i++)
+        {
+            if (name.substr(i, 4) == "UInt")
+            {
+                w.write('_');
+            }
 
-			w.write(case_func(name[i]));
-		}
-		w.write(case_func(name[name.size() - 1]));
-	}
+            if (isupper(name[i]) && islower(name[i + 1]))
+            {
+                if (name.substr(i-1, 4) != "UInt")
+                {
+                    w.write('_');
+                }
+            }
+
+            w.write(case_func(name[i]));
+        }
+        w.write(case_func(name[name.size() - 1]));
+    }
 
     void write_python_enum(writer& w, TypeDef const& type)
     {
