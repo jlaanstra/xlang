@@ -26,7 +26,7 @@ class TestCollections(unittest.TestCase):
             future = loop.create_future()
 
             def onMapChanged(sender, args): 
-                self.assertEqual(args.CollectionChange, wfc.CollectionChange.ItemInserted)
+                self.assertEqual(args.CollectionChange, wfc.CollectionChange.ITEM_INSERTED)
                 self.assertEqual(args.Key, "dr")
 
                 self.assertEqual(sender.Size, 2)
